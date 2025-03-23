@@ -337,40 +337,60 @@ def solve_master_problem(columns, demands, num_customers):
             selected_routes.append(columns[i][0])
     return selected_routes, duals
 
-# Função para resolver o problema de precificação (heurística gulosa)
+# Função para resolver o problema de precificação (heurística gulosa ajustada)
 def pricing_problem(duals, distances, demands, capacity, num_customers):
-    route = []
-    current_demand = 0
-    current_cost = 0
-    current_node = 0
-    visited = set([0])
+    best_route = []
+    best_reduced_cost = float('inf')
+    visited = set([0])  # Depósito já visitado
     
-    while True:
-        best_next = None
-        best_reduced_cost = float('inf')
-        for next_node in range(1, num_customers + 1):
-            if next_node in visited:
-                continue
-            edge_cost = distances[current_node][next_node]
-            reduced_cost = edge_cost - duals.get(next_node, 0)
-            if reduced_cost < best_reduced_cost and current_demand + demands[next_node] <= capacity:
-                best_reduced_cost = reduced_cost
-                best_next = next_node
+    # Tentar construir várias rotas e escolher a melhor
+    for _ in range(10):  # Aumentar para 10 tentativas
+        route = []
+        current_demand = 0
+        current_cost = 0
+        current_node = 0
         
-        if best_next is None or best_reduced_cost >= 0:
-            break
+        # Lista de clientes não visitados
+        unvisited = set(range(1, num_customers + 1)) - visited
         
-        route.append(best_next)
-        visited.add(best_next)
-        current_demand += demands[best_next]
-        current_cost += distances[current_node][best_next]
-        current_node = best_next
+        while unvisited:
+            candidates = []
+            for next_node in unvisited:
+                if current_demand + demands[next_node] <= capacity:
+                    edge_cost = distances[current_node][next_node]
+                    reduced_cost = edge_cost - duals.get(next_node, 0)
+                    # Introduzir um incentivo para rotas mais longas
+                    length_bonus = 0.1 * len(route)  # Pequeno bônus por cliente adicionado
+                    adjusted_reduced_cost = reduced_cost - length_bonus
+                    candidates.append((next_node, adjusted_reduced_cost, edge_cost))
+            
+            if not candidates:
+                break
+            
+            # Escolher o próximo cliente com uma combinação de custo reduzido e aleatoriedade
+            candidates.sort(key=lambda x: x[1])  # Ordenar por custo reduzido ajustado
+            top_candidates = candidates[:min(3, len(candidates))]  # Pegar os 3 melhores
+            next_node, _, edge_cost = random.choice(top_candidates)  # Escolher aleatoriamente entre os melhores
+            
+            route.append(next_node)
+            unvisited.remove(next_node)
+            current_demand += demands[next_node]
+            current_cost += edge_cost
+            current_node = next_node
+        
+        # Voltar ao depósito
+        if route:
+            current_cost += distances[current_node][0]
+        
+        # Calcular o custo reduzido total da rota
+        reduced_cost = current_cost - sum(duals.get(c, 0) for c in route)
+        
+        # Atualizar a melhor rota encontrada
+        if reduced_cost < best_reduced_cost:
+            best_reduced_cost = reduced_cost
+            best_route = route
     
-    if route:
-        current_cost += distances[current_node][0]
-    
-    reduced_cost = current_cost - sum(duals.get(c, 0) for c in route)
-    return route, current_cost, reduced_cost
+    return best_route, current_cost if route else 0, best_reduced_cost
 
 # Função principal do CGN
 def column_generation(refined_routes, distances, demands, capacity, num_customers, max_iterations=20):
@@ -429,6 +449,7 @@ def validate_routes(routes, demands, capacity):
         return False
     for i, route in enumerate(routes):
         demand = sum(demands[c] for c in route)
+        print(f"Rota {i+1} ({route}): Demanda = {demand}")
         if demand > capacity:
             print(f"Erro: Rota {i+1} ({route}) excede a capacidade {capacity}: Demanda = {demand}")
             return False
@@ -477,6 +498,11 @@ def main(toolbox, distances):
     # Obter a melhor solução
     best_individual = hof[0]
     routes = decode_individual(best_individual, demands, capacity)
+    print("Rotas após algoritmo genético:", routes)
+    print("Demandas após algoritmo genético:")
+    for i, route in enumerate(routes):
+        demand = sum(demands[c] for c in route)
+        print(f"Rota {i+1} ({route}): Demanda = {demand}")
     print("Validando rotas após algoritmo genético...")
     if not validate_routes(routes, demands, capacity):
         raise ValueError("Rotas inválidas após algoritmo genético!")
