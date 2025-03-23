@@ -76,9 +76,9 @@ def split_routes(individual, demands, capacity):
     current_load = 0
 
     for customer in individual:
-        demand = demands[customer + 1]  # +1 porque indivíduos são 0 a 30, mas demands é 0 a 31
+        demand = demands[customer + 1]
         if current_load + demand <= capacity:
-            current_route.append(customer + 1)  # Retorna índices 1 a 31 para consistência
+            current_route.append(customer + 1)
             current_load += demand
         else:
             if current_route:
@@ -98,7 +98,7 @@ def decode_individual(individual, demands, capacity):
     current_demand = 0
 
     for customer in individual:
-        demand = demands[customer + 1]  # Ajuste para índices 1 a 31
+        demand = demands[customer + 1]
         if current_demand + demand <= capacity:
             current_route.append(customer + 1)
             current_demand += demand
@@ -121,16 +121,16 @@ def evaluate(individual, coords, demands, capacity):
     for route in routes:
         if not route:
             continue
-        total_distance += euclidean_distance(coords[0], coords[route[0]])  # Depósito ao primeiro
+        total_distance += euclidean_distance(coords[0], coords[route[0]])
         for i in range(len(route) - 1):
             total_distance += euclidean_distance(coords[route[i]], coords[route[i + 1]])
-        total_distance += euclidean_distance(coords[route[-1]], coords[0])  # Último ao depósito
+        total_distance += euclidean_distance(coords[route[-1]], coords[0])
 
-    return (total_distance,)  # DEAP exige tupla
+    return (total_distance,)
 
 # Função para reparar indivíduos inválidos
 def repair_individual(ind, n_customers):
-    valid_indices = set(range(0, n_customers))  # 0 a 30
+    valid_indices = set(range(0, n_customers))
     current_indices = set(ind)
     ind[:] = [x for x in ind if 0 <= x < n_customers]
     missing = list(valid_indices - current_indices)
@@ -140,7 +140,7 @@ def repair_individual(ind, n_customers):
     return ind
 
 # Função para plotar as rotas
-def plot_routes(coords, routes):
+def plot_routes(coords, routes, title="Rotas Otimizadas para o CVRP"):
     plt.figure(figsize=(10, 6))
     plt.scatter([coords[0][0]], [coords[0][1]], c='red', label='Depósito', s=100)
     for i in range(1, len(coords)):
@@ -152,7 +152,80 @@ def plot_routes(coords, routes):
         x = [coords[c][0] for c in full_route]
         y = [coords[c][1] for c in full_route]
         plt.plot(x, y, color=colors[i % len(colors)], label=f'Rota {i+1}', linewidth=2)
-    plt.title("Rotas Otimizadas para o CVRP")
+    plt.title(title)
+    plt.xlabel("Coordenada X")
+    plt.ylabel("Coordenada Y")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+# Função para plotar a convergência do algoritmo genético
+def plot_convergence(logbook):
+    gen = logbook.select("gen")
+    min_fitness = logbook.select("min")
+    avg_fitness = logbook.select("avg")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(gen, min_fitness, label="Distância Mínima", color='blue')
+    plt.plot(gen, avg_fitness, label="Distância Média", color='orange', linestyle='--')
+    plt.title("Convergência do Algoritmo Genético")
+    plt.xlabel("Geração")
+    plt.ylabel("Distância")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+# Função para plotar comparação de distâncias
+def plot_distance_comparison(distances, stages):
+    plt.figure(figsize=(8, 5))
+    bars = plt.bar(stages, distances, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
+    plt.title("Comparação de Distâncias por Etapa")
+    plt.xlabel("Etapa")
+    plt.ylabel("Distância Total")
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval + 5, f'{yval:.2f}', ha='center', va='bottom')
+    plt.show()
+
+# Função para plotar demandas por rota
+def plot_route_demands(routes, demands, capacity):
+    route_demands = [sum(demands[c] for c in route) for route in routes]
+    route_labels = [f'Rota {i+1}' for i in range(len(routes))]
+
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(route_labels, route_demands, color='skyblue')
+    plt.axhline(y=capacity, color='red', linestyle='--', label=f'Capacidade Máxima ({capacity})')
+    plt.title("Demandas por Rota")
+    plt.xlabel("Rota")
+    plt.ylabel("Demanda Total")
+    plt.legend()
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval + 2, f'{yval}', ha='center', va='bottom')
+    plt.show()
+
+# Função para plotar dispersão com demandas
+def plot_scatter_with_demands(coords, routes, demands):
+    plt.figure(figsize=(10, 6))
+    max_demand = max(demands[1:])
+    min_demand = min(demands[1:])
+    sizes = [50 + 200 * (demands[i] - min_demand) / (max_demand - min_demand) for i in range(len(coords))]
+    
+    plt.scatter([coords[0][0]], [coords[0][1]], c='red', label='Depósito', s=100)
+    for i in range(1, len(coords)):
+        plt.scatter([coords[i][0]], [coords[i][1]], c='blue', s=sizes[i], alpha=0.6)
+        plt.text(coords[i][0], coords[i][1], str(i), fontsize=8, ha='right')
+    
+    colors = ['green', 'blue', 'cyan', 'purple', 'yellow']
+    for i, route in enumerate(routes):
+        full_route = [0] + route + [0]
+        x = [coords[c][0] for c in full_route]
+        y = [coords[c][1] for c in full_route]
+        plt.plot(x, y, color=colors[i % len(colors)], label=f'Rota {i+1}', linewidth=2)
+    
+    plt.title("Dispersão dos Clientes com Demandas e Rotas")
     plt.xlabel("Coordenada X")
     plt.ylabel("Coordenada Y")
     plt.legend()
@@ -170,7 +243,7 @@ def calculate_route_distance(route, coords):
     return distance
 
 # Função 2-opt para melhorar uma rota individual
-def two_opt(route, coords):
+def two_opt(route, coords, demands, capacity):
     best_route = route.copy()
     best_distance = calculate_route_distance(best_route, coords)
     improved = True
@@ -180,22 +253,24 @@ def two_opt(route, coords):
         for i in range(1, len(best_route) - 1):
             for j in range(i + 1, len(best_route)):
                 new_route = best_route[:i] + best_route[i:j+1][::-1] + best_route[j+1:]
-                new_distance = calculate_route_distance(new_route, coords)
-                if new_distance < best_distance:
-                    best_route = new_route
-                    best_distance = new_distance
-                    improved = True
+                demand = sum(demands[c] for c in new_route)
+                if demand <= capacity:
+                    new_distance = calculate_route_distance(new_route, coords)
+                    if new_distance < best_distance:
+                        best_route = new_route
+                        best_distance = new_distance
+                        improved = True
         if not improved:
             break
 
     return best_route
 
 # Função para aplicar 2-opt a todas as rotas
-def two_opt_refinement(routes, coords):
+def two_opt_refinement(routes, coords, demands, capacity):
     refined_routes = []
     for route in routes:
         if len(route) > 1:
-            refined_route = two_opt(route, coords)
+            refined_route = two_opt(route, coords, demands, capacity)
             refined_routes.append(refined_route)
         else:
             refined_routes.append(route)
@@ -262,58 +337,40 @@ def solve_master_problem(columns, demands, num_customers):
             selected_routes.append(columns[i][0])
     return selected_routes, duals
 
-# Função para resolver o problema de precificação
+# Função para resolver o problema de precificação (heurística gulosa)
 def pricing_problem(duals, distances, demands, capacity, num_customers):
-    prob = LpProblem("Pricing_Problem", LpMinimize)
-    y = {(i, j): LpVariable(f"y_{i}_{j}", 0, 1, LpBinary)
-         for i in range(num_customers + 1) for j in range(num_customers + 1) if i != j}
-    u = {i: LpVariable(f"u_{i}", 0, 1, LpBinary) for i in range(1, num_customers + 1)}
-    prob += lpSum(distances[i][j] * y[(i, j)]
-                  for i in range(num_customers + 1)
-                  for j in range(num_customers + 1) if i != j) - lpSum(
-        duals[c] * u[c] for c in range(1, num_customers + 1) if c in duals
-    )
-    prob += lpSum(y[(0, j)] for j in range(1, num_customers + 1)) == 1, "Leave_Depot"
-    prob += lpSum(y[(i, 0)] for i in range(1, num_customers + 1)) == 1, "Return_Depot"
-    for k in range(1, num_customers + 1):
-        prob += (
-            lpSum(y[(i, k)] for i in range(num_customers + 1) if i != k) ==
-            lpSum(y[(k, j)] for j in range(num_customers + 1) if j != k),
-            f"Flow_{k}"
-        )
-        prob += u[k] == lpSum(y[(i, k)] for i in range(num_customers + 1) if i != k), f"Visit_{k}"
-    prob += (
-        lpSum(demands[c] * u[c] for c in range(1, num_customers + 1)) <= capacity,
-        "Capacity"
-    )
-    t = {i: LpVariable(f"t_{i}", 0, num_customers) for i in range(num_customers + 1)}
-    for i in range(1, num_customers + 1):
-        for j in range(1, num_customers + 1):
-            if i != j:
-                prob += t[i] - t[j] + (num_customers + 1) * y[(i, j)] <= num_customers, f"MTZ_{i}_{j}"
-    prob.solve()
-    if prob.status != 1:
-        return [], float('inf'), float('inf')
-    new_route = []
-    current = 0
+    route = []
+    current_demand = 0
+    current_cost = 0
+    current_node = 0
     visited = set([0])
+    
     while True:
-        next_node = None
-        for j in range(num_customers + 1):
-            if j not in visited and y[(current, j)].varValue > 0.5:
-                next_node = j
-                break
-        if next_node is None:
+        best_next = None
+        best_reduced_cost = float('inf')
+        for next_node in range(1, num_customers + 1):
+            if next_node in visited:
+                continue
+            edge_cost = distances[current_node][next_node]
+            reduced_cost = edge_cost - duals.get(next_node, 0)
+            if reduced_cost < best_reduced_cost and current_demand + demands[next_node] <= capacity:
+                best_reduced_cost = reduced_cost
+                best_next = next_node
+        
+        if best_next is None or best_reduced_cost >= 0:
             break
-        if next_node != 0:
-            new_route.append(next_node)
-        visited.add(next_node)
-        current = next_node
-        if current == 0:
-            break
-    cost = calculate_route_cost(new_route, distances)
-    reduced_cost = cost - sum(duals[c] for c in new_route if c in duals)
-    return new_route, cost, reduced_cost
+        
+        route.append(best_next)
+        visited.add(best_next)
+        current_demand += demands[best_next]
+        current_cost += distances[current_node][best_next]
+        current_node = best_next
+    
+    if route:
+        current_cost += distances[current_node][0]
+    
+    reduced_cost = current_cost - sum(duals.get(c, 0) for c in route)
+    return route, current_cost, reduced_cost
 
 # Função principal do CGN
 def column_generation(refined_routes, distances, demands, capacity, num_customers, max_iterations=20):
@@ -349,11 +406,13 @@ def column_generation(refined_routes, distances, demands, capacity, num_customer
     return final_routes, total_cost
 
 # Função para aplicar busca por vizinhança
-def apply_neighborhood_search(routes, coords, demands, capacity):
+def apply_neighborhood_search(routes, coords, demands, capacity, distances):
     refined_routes = routes.copy()
     for _ in range(3):
-        refined_routes = two_opt_refinement(refined_routes, coords)
+        refined_routes = two_opt_refinement(refined_routes, coords, demands, capacity)
         refined_routes = inter_route_swap_refinement(refined_routes, coords, demands, capacity)
+        if not validate_routes(refined_routes, demands, capacity):
+            raise ValueError("Busca por vizinhança gerou rotas inválidas!")
     return refined_routes
 
 # Função para validar rotas
@@ -390,11 +449,11 @@ distances = calculate_distance_matrix(coords)
 
 # Verificar consistência dos dados
 print(f"Len coords: {len(coords)}, Len demands: {len(demands)}, Capacity: {capacity}")
-n_customers = len(coords) - 1  # Deve ser 31 para A-n32-k5
+n_customers = len(coords) - 1
 print(f"n_customers: {n_customers}")
 
 # Configurar o DEAP
-toolbox.register("indices", random.sample, range(0, n_customers), n_customers)  # 0 a 30
+toolbox.register("indices", random.sample, range(0, n_customers), n_customers)
 toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 toolbox.register("mate", tools.cxPartialyMatched)
@@ -403,7 +462,7 @@ toolbox.register("select", tools.selTournament, tournsize=3)
 toolbox.register("evaluate", evaluate, coords=coords, demands=demands, capacity=capacity)
 
 # Função principal
-def main(toolbox):
+def main(toolbox, distances):
     pop = toolbox.population(n=100)
     hof = tools.HallOfFame(1)
     stats = tools.Statistics(lambda ind: ind.fitness.values)
@@ -411,15 +470,20 @@ def main(toolbox):
     stats.register("min", np.min)
     pop, log = algorithms.eaSimple(pop, toolbox, cxpb=0.7, mutpb=0.2, ngen=50, stats=stats, halloffame=hof, verbose=True)
 
+    # Plotar a convergência do algoritmo genético
+    plot_convergence(log)
+    ga_distance = hof[0].fitness.values[0]
+
     # Obter a melhor solução
     best_individual = hof[0]
     routes = decode_individual(best_individual, demands, capacity)
     print("Validando rotas após algoritmo genético...")
     if not validate_routes(routes, demands, capacity):
         raise ValueError("Rotas inválidas após algoritmo genético!")
+    plot_routes(coords, routes, title="Rotas Após Algoritmo Genético")
 
     # Refinar com 2-opt e inter-troca
-    refined_routes = two_opt_refinement(routes, coords)
+    refined_routes = two_opt_refinement(routes, coords, demands, capacity)
     refined_routes = inter_route_swap_refinement(refined_routes, coords, demands, capacity)
     refined_distance = sum(calculate_route_cost(route, distances) for route in refined_routes)
     print(f"Melhor distância após refinamento inicial: {refined_distance}")
@@ -427,6 +491,7 @@ def main(toolbox):
     print("Validando rotas após refinamento inicial...")
     if not validate_routes(refined_routes, demands, capacity):
         raise ValueError("Rotas inválidas após refinamento inicial!")
+    plot_routes(coords, refined_routes, title="Rotas Após Refinamento Inicial")
 
     # Aplicar o CGN
     print("\nIniciando o CGN...")
@@ -436,9 +501,10 @@ def main(toolbox):
     print("Validando rotas após CGN...")
     if not validate_routes(cgn_routes, demands, capacity):
         raise ValueError("Rotas inválidas após CGN!")
+    plot_routes(coords, cgn_routes, title="Rotas Após CGN")
 
     # Aplicar busca por vizinhança (2-opt e inter-troca) novamente
-    final_routes = apply_neighborhood_search(cgn_routes, coords, demands, capacity)
+    final_routes = apply_neighborhood_search(cgn_routes, coords, demands, capacity, distances)
     final_distance = sum(calculate_route_cost(route, distances) for route in final_routes)
     print(f"Melhor distância final após busca por vizinhança: {final_distance}")
     print(f"Rotas finais: {final_routes}")
@@ -446,11 +512,23 @@ def main(toolbox):
     if not validate_routes(final_routes, demands, capacity):
         raise ValueError("Rotas inválidas após busca por vizinhança!")
 
-    # Plotar as rotas finais
-    plot_routes(coords, final_routes)
+    # Plotar gráficos adicionais
+    # 1. Comparação de distâncias
+    distances_list = [ga_distance, refined_distance, cgn_distance, final_distance]
+    stages = ["Algoritmo Genético", "Refinamento Inicial", "CGN", "Busca por Vizinhança"]
+    plot_distance_comparison(distances_list, stages)
+
+    # 2. Demandas por rota
+    plot_route_demands(final_routes, demands, capacity)
+
+    # 3. Dispersão com demandas
+    plot_scatter_with_demands(coords, final_routes, demands)
+
+    # 4. Rotas finais
+    plot_routes(coords, final_routes, title="Rotas Finais")
 
     return pop, log, hof, final_routes
 
 if __name__ == "__main__":
-    pop, log, hof, refined_routes = main(toolbox)
+    pop, log, hof, refined_routes = main(toolbox, distances)
     print("Rotas refinadas finais:", refined_routes)
