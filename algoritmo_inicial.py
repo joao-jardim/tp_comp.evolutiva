@@ -148,6 +148,83 @@ def repair_individual(ind, n_customers):
     ind[:] = ind[:n_customers]
     return ind
 
+#2-opt
+import numpy as np
+
+def calculate_route_distance(route, coords):
+    """Calcula a distância total de uma rota (incluindo ida e volta ao depósito)."""
+    full_route = [0] + route + [0]  # Depósito -> Rota -> Depósito
+    distance = 0
+    for i in range(len(full_route) - 1):
+        x1, y1 = coords[full_route[i]]
+        x2, y2 = coords[full_route[i + 1]]
+        distance += np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    return distance
+
+def two_opt(route, coords):
+    """Aplica o 2-opt para melhorar uma rota individual."""
+    best_route = route.copy()
+    best_distance = calculate_route_distance(best_route, coords)
+    improved = True
+    
+    while improved:
+        improved = False
+        for i in range(1, len(best_route) - 1):
+            for j in range(i + 1, len(best_route)):
+                # Inverte o segmento entre i e j
+                new_route = best_route[:i] + best_route[i:j+1][::-1] + best_route[j+1:]
+                new_distance = calculate_route_distance(new_route, coords)
+                if new_distance < best_distance:
+                    best_route = new_route
+                    best_distance = new_distance
+                    improved = True
+        if not improved:
+            break
+    
+    return best_route
+
+def refine_routes(routes, coords):
+    """Aplica 2-opt a cada rota para refinamento intra-rota."""
+    refined_routes = []
+    for route in routes:
+        if len(route) > 1:  # Só aplica 2-opt se a rota tiver mais de 1 cliente
+            refined_route = two_opt(route, coords)
+            refined_routes.append(refined_route)
+        else:
+            refined_routes.append(route)
+    return refined_routes
+
+
+#Inter-rotas:
+def inter_route_swap(routes, coords, demands, capacity):
+    """Troca clientes entre rotas para melhorar a solução."""
+    best_routes = [route.copy() for route in routes]
+    best_distance = sum(calculate_route_distance(route, coords) for route in best_routes)
+    
+    for r1 in range(len(best_routes)):
+        for r2 in range(r1 + 1, len(best_routes)):
+            route1, route2 = best_routes[r1], best_routes[r2]
+            for i in range(len(route1)):
+                for j in range(len(route2)):
+                    # Troca os clientes route1[i] e route2[j]
+                    new_route1 = route1[:i] + [route2[j]] + route1[i+1:]
+                    new_route2 = route2[:j] + [route1[i]] + route2[j+1:]
+                    
+                    # Verifica a capacidade
+                    demand1 = sum(demands[c] for c in new_route1)
+                    demand2 = sum(demands[c] for c in new_route2)
+                    if demand1 <= capacity and demand2 <= capacity:
+                        new_distance = (calculate_route_distance(new_route1, coords) +
+                                       calculate_route_distance(new_route2, coords))
+                        old_distance = (calculate_route_distance(route1, coords) +
+                                       calculate_route_distance(route2, coords))
+                        if new_distance < old_distance:
+                            best_routes[r1] = new_route1
+                            best_routes[r2] = new_route2
+                            best_distance = sum(calculate_route_distance(route, coords) for route in best_routes)
+    
+    return best_routes
+
 def main(toolbox):
     random.seed(42)
     pop = toolbox.population(n=100)
@@ -158,15 +235,14 @@ def main(toolbox):
             print(f"Indivíduo inicial {i} inválido: {ind}")
             ind[:] = repair_individual(ind, n_customers)
             print(f"Indivíduo {i} corrigido: {ind}")
-        #else:
-            #print(f"Indivíduo {i} OK: {ind[:5]}... (tamanho: {len(ind)})")
+        else:
+            print(f"Indivíduo {i} OK: {ind[:5]}... (tamanho: {len(ind)})")
     
     hof = tools.HallOfFame(1)
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg", np.mean)
     stats.register("min", np.min)
     
-    # Listas para armazenar as estatísticas por geração
     min_fitnesses = []
     avg_fitnesses = []
     
@@ -178,7 +254,7 @@ def main(toolbox):
         for i in range(0, len(pop), 2):
             if i + 1 < len(pop) and random.random() < 0.7:
                 ind1, ind2 = toolbox.clone(pop[i]), toolbox.clone(pop[i + 1])
-                #print(f"Antes crossover - ind1: {ind1[:5]}..., ind2: {ind2[:5]}...")
+                print(f"Antes crossover - ind1: {ind1[:5]}..., ind2: {ind2[:5]}...")
                 toolbox.mate(ind1, ind2)
                 if len(ind1) != n_customers or max(ind1) >= n_customers or min(ind1) < 0:
                     print(f"Erro após crossover em ind1 (antes da correção): {ind1}")
@@ -197,7 +273,7 @@ def main(toolbox):
         
         for ind in offspring:
             if random.random() < 0.2:
-                #print(f"Antes mutação: {ind[:5]}...")
+                print(f"Antes mutação: {ind[:5]}...")
                 toolbox.mutate(ind)
                 if len(ind) != n_customers or max(ind) >= n_customers or min(ind) < 0:
                     print(f"Erro após mutação (antes da correção): {ind}")
@@ -213,7 +289,6 @@ def main(toolbox):
         pop = offspring
         hof.update(pop)
         
-        # Calcular e armazenar estatísticas
         stats_data = stats.compile(pop)
         min_fitnesses.append(stats_data["min"])
         avg_fitnesses.append(stats_data["avg"])
@@ -221,10 +296,19 @@ def main(toolbox):
     
     best_individual = hof[0]
     best_routes = split_routes(best_individual, demands, capacity)
-    print(f"Melhor distância: {hof[0].fitness.values[0]}")
-    print(f"Rotas: {best_routes}")
     
-    plot_routes(coords, best_routes)
+    # Refinamento das rotas
+    print("\nRefinando rotas com 2-opt...")
+    refined_routes = refine_routes(best_routes, coords)
+    print("Refinando rotas com troca inter-rota...")
+    refined_routes = inter_route_swap(refined_routes, coords, demands, capacity)
+    
+    # Recalcular a distância após o refinamento
+    refined_distance = sum(calculate_route_distance(route, coords) for route in refined_routes)
+    print(f"Melhor distância após refinamento: {refined_distance}")
+    print(f"Rotas refinadas: {refined_routes}")
+    
+    plot_routes(coords, refined_routes)
     
     gen = range(50)
     plt.figure(figsize=(10, 6))
@@ -237,8 +321,8 @@ def main(toolbox):
     plt.grid(True)
     plt.show()
     
-    return pop, None, hof
+    return pop, None, hof, refined_routes
 
 if __name__ == "__main__":
-    pop, log, hof = main(toolbox)
-    
+    pop, log, hof, refined_routes = main(toolbox)
+    print("Rotas refinadas finais:", refined_routes)
